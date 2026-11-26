@@ -1,6 +1,6 @@
 import java.util.Arrays;
 
-class SudokuBoard implements Cloneable {
+public class SudokuBoard implements Cloneable {
 
     public static final int SIZE = 9;      // 9x9 grid
     public static final int BOX_SIZE = 3;  // 3x3 subgrids
