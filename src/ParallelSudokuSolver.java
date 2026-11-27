@@ -137,8 +137,91 @@ public class ParallelSudokuSolver implements SudokuSolver {
         }
     }
 
-    // ==========================================
-    // YASSMINE PART 
-    // ==========================================
+   
+    /**
+     * Publishes a solved board safely.
+     * compareAndSet(null, ...) succeeds for ONE thread only (the first one);
+     * if two tasks find a solution at the same time, the second one is ignored.
+     * We store a clone so nobody can modify the published board afterwards.
+     */
+    private static boolean publishSolution(SudokuBoard solved,
+                                           AtomicReference<SudokuBoard> solution) {
+        return solution.compareAndSet(null, solved.clone());
+    }
+
+    /**
+     * For the given empty cell, returns one INDEPENDENT board (a clone) per
+     * valid candidate number. Each child task gets its own board, so tasks
+     * never share mutable state. The parent board is never modified.
+     */
+    private static List<SudokuBoard> createBranches(SudokuBoard board, int[] cell) {
+
+        List<SudokuBoard> branches = new ArrayList<>();
+        int row = cell[0];
+        int col = cell[1];
+
+        for (int num = 1; num <= 9; num++) {
+            if (board.isValidMove(row, col, num)) {
+                SudokuBoard copy = board.clone();   // private copy for the child
+                copy.set(row, col, num);
+                branches.add(copy);
+            }
+        }
+
+        return branches;
+    }
+
+    /**
+     * Sequential recursive backtracking, used once depth >= threshold.
+     * Works ONLY on the board owned by the calling task (no sharing).
+     * Checks the shared "solution" reference so it stops early when
+     * another task has already found an answer.
+     *
+     * @return true if this call found (and published) a solution
+     */
+    private static boolean backtrack(SudokuBoard board,
+                                     AtomicReference<SudokuBoard> solution) {
+
+        // Early termination: someone else already solved it
+        if (solution.get() != null) {
+            return false;
+        }
+
+        int[] cell = board.findEmptyCell();
+
+        // No empty cells left -> check and publish
+        if (cell == null) {
+            if (board.isSolved()) {
+                publishSolution(board, solution);
+                return true;
+            }
+            return false;
+        }
+
+        int row = cell[0];
+        int col = cell[1];
+
+        for (int num = 1; num <= 9; num++) {
+
+            // Stop quickly if another task finished meanwhile
+            if (solution.get() != null) {
+                return false;
+            }
+
+            if (board.isValidMove(row, col, num)) {
+                board.set(row, col, num);
+
+                if (backtrack(board, solution)) {
+                    return true;
+                }
+
+                board.set(row, col, SudokuBoard.EMPTY);   // undo
+            }
+        }
+
+        return false;
+    }
 }
+
+
 
